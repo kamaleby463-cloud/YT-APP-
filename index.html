@@ -288,45 +288,6 @@
             return (match && match[2].length === 11) ? match[2] : null;
         }
 
-        // دالة سحب الرابط الخام القوية جداً التي تجرب عدة سيرفرات لمنع ظهور رسالة "لا يمكن الوصول"
-        async function fetchDirectLinks(videoId) {
-            // قائمة خوادم مفتوحة المصدر (بدون إعلانات)
-            const servers = [
-                'https://pipedapi.kavin.rocks',
-                'https://pipedapi.moomoo.me',
-                'https://piped-api.garudalinux.org'
-            ];
-
-            for (let server of servers) {
-                try {
-                    const response = await fetch(`${server}/streams/${videoId}`);
-                    if (!response.ok) continue; // إذا كان السيرفر معطل، جرب الذي بعده فوراً
-                    
-                    const data = await response.json();
-                    
-                    let videoUrl = '';
-                    let audioUrl = '';
-                    
-                    // جلب رابط الفيديو (MP4) المباشر
-                    const videoStream = data.videoStreams.find(s => s.videoOnly === false && s.mimeType.includes('mp4')) 
-                                     || data.videoStreams.find(s => s.videoOnly === false);
-                    if (videoStream) videoUrl = videoStream.url;
-
-                    // جلب رابط الصوت (M4A) المباشر
-                    const audioStream = data.audioStreams.find(s => s.mimeType.includes('m4a')) 
-                                     || data.audioStreams[0];
-                    if (audioStream) audioUrl = audioStream.url;
-
-                    if (videoUrl && audioUrl) {
-                        return { videoUrl, audioUrl }; // إرجاع الروابط النظيفة
-                    }
-                } catch (e) {
-                    console.log("Server failed, trying next...");
-                }
-            }
-            throw new Error("عذراً، جميع الخوادم تواجه ضغطاً حالياً.");
-        }
-
         async function fetchMedia() {
             const urlInput = document.getElementById('videoUrl');
             const url = urlInput.value.trim();
@@ -340,53 +301,55 @@
             const videoId = getYouTubeVideoId(url);
             if (!videoId) { showError('يرجى التأكد من أن الرابط هو لفيديو يوتيوب صالح'); return; }
 
-            btnText.innerText = 'جاري تحليل الفيديو...';
+            btnText.innerText = 'جاري التحليل...';
             btnIcon.className = 'fa-solid fa-spinner animate-spin';
             errorMsg.classList.add('hidden');
             resultDiv.classList.add('hidden');
             document.getElementById('btn-fetch').disabled = true;
 
             try {
-                // 1. جلب الصورة
-                document.getElementById('preview-image').src = `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
+                // جلب صورة الفيديو
+                const thumbnailUrl = `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
+                document.getElementById('preview-image').src = thumbnailUrl;
                 document.getElementById('preview-image').onerror = function() {
                     this.src = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
                 };
 
-                // 2. جلب العنوان
+                // جلب العنوان والمعلومات
                 try {
                     const noembedRes = await fetch(`https://noembed.com/embed?url=${encodeURIComponent(url)}`);
                     const embedData = await noembedRes.json();
                     if(embedData.title) {
                         document.getElementById('media-title').innerText = embedData.title;
                         document.getElementById('author-name').innerText = embedData.author_name || 'قناة يوتيوب';
-                        document.getElementById('author-avatar').innerHTML = `<span class="text-sm">${(embedData.author_name || 'Y').charAt(0)}</span>`;
+                        if(embedData.author_name) {
+                            document.getElementById('author-avatar').innerHTML = `<span class="text-sm">${embedData.author_name.charAt(0)}</span>`;
+                        }
                     }
                 } catch(e) {
-                    document.getElementById('media-title').innerText = 'فيديو يوتيوب جاهز للتشغيل';
+                    document.getElementById('media-title').innerText = 'فيديو يوتيوب جاهز للتحميل';
                 }
                 
-                // 3. الخطوة الأهم: سحب الروابط الخام (Raw Links) قبل إظهار الأزرار
-                const links = await fetchDirectLinks(videoId);
+                // الحل النهائي الخالي من أي انهيار للتطبيق: استخدام روابط <a> طبيعية كلاسيكية
+                // هذه الروابط توجه المستخدم مباشرة للملف الأصلي (MP4 أو MP3) من السيرفر بدون أي نوافذ منبثقة برمجية 
+                const rawVideoLink = `https://yewtu.be/latest_version?id=${videoId}&itag=22`;
+                const rawAudioLink = `https://yewtu.be/latest_version?id=${videoId}&itag=140`;
 
-                // 4. وضع الروابط بشكل "طبيعي" داخل <a> tag. 
-                // هذا يمنع انهيار المتصفح (الخروج المفاجئ) لأننا لا نستخدم الجافاسكربت لفتحها.
-                // المتصفح سيتنقل لها كأي رابط عادي في الإنترنت ويفتح المشغل الأسود تلقائياً.
                 downloadBox.innerHTML = `
-                    <a href="${links.videoUrl}" class="w-full bg-primary text-white font-black py-5 rounded-[1.5rem] flex items-center justify-center gap-4 transition-all active:scale-[0.97] shadow-xl text-lg hover:brightness-110">
+                    <a href="${rawVideoLink}" target="_blank" rel="noopener noreferrer" class="w-full bg-primary text-white font-black py-5 rounded-[1.5rem] flex items-center justify-center gap-4 transition-all active:scale-[0.97] shadow-xl text-lg hover:brightness-110">
                         <i class="fa-solid fa-video"></i>
-                        <span>تشغيل الفيديو في المتصفح</span>
+                        <span>فتح الفيديو في المتصفح</span>
                     </a>
-                    <a href="${links.audioUrl}" class="w-full bg-white/5 border border-white/10 text-white font-black py-4 rounded-[1.5rem] flex items-center justify-center gap-3 hover:bg-white/10 transition-all text-sm active:scale-[0.97]">
+                    <a href="${rawAudioLink}" target="_blank" rel="noopener noreferrer" class="w-full bg-white/5 border border-white/10 text-white font-black py-4 rounded-[1.5rem] flex items-center justify-center gap-3 hover:bg-white/10 transition-all text-sm active:scale-[0.97]">
                         <i class="fa-solid fa-music text-primary"></i>
-                        <span>تشغيل الصوت في المتصفح</span>
+                        <span>فتح الصوت في المتصفح</span>
                     </a>`;
 
                 resultDiv.classList.remove('hidden');
                 setTimeout(() => resultDiv.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
 
             } catch (err) { 
-                showError(err.message || 'حدث خطأ غير متوقع، يرجى المحاولة مرة أخرى.'); 
+                showError('حدث خطأ أثناء جلب البيانات، جرب رابطاً آخر.'); 
             } finally {
                 btnText.innerText = 'تحليل الرابط';
                 btnIcon.className = 'fa-solid fa-magnifying-glass';
